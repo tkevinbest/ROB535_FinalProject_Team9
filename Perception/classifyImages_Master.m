@@ -1,9 +1,12 @@
-clear
+clearvars -except imageFolder_Training imageFolder_Testing
 close all
 
 % Load the images
-imageFolder_Training = uigetdir('.','Locate the training image folder on your computer:');
-imageFolder_Testing = uigetdir([imageFolder_Training,'\..'],'Locate the testing image folder on your computer:');
+if(~exist('imageFolder_Testing','var'))
+    imageFolder_Training = uigetdir('.','Locate the training image folder on your computer:');
+    imageFolder_Testing = uigetdir([imageFolder_Training,'\..'],'Locate the testing image folder on your computer:');
+end
+
 warning('off','MATLAB:table:ModifiedAndSavedVarnames');
 trainLabels = readtable((fullfile(imageFolder_Training, 'labels.csv')));
 trainingImages = imageDatastore(imageFolder_Training,'IncludeSubfolders',true, 'Labels',categorical(trainLabels.label)); 
@@ -29,25 +32,54 @@ end
 
 %% Preprocess data - balance if desired. May want to remove this because it tosses out a bunch of data
 imageCounts = countEachLabel(trainingImages);
-minExamples = min(imageCounts.Count); 
-trainingImages = splitEachLabel(trainingImages, minExamples, 'randomize'); 
+minExamples = median(imageCounts.Count); 
+% trainingImages = splitEachLabel(trainingImages, minExamples, 'randomize'); 
 
 %% Load pretrained network for feature extraction
-featureNetwork = resnet50(); 
+% featureNetwork = resnet50(); 
+featureNetwork = googlenet(); 
+% featureNetwork = resnet101();
 
 desiredImageSize = featureNetwork.Layers(1).InputSize; 
 resizedTrainingSet = augmentedImageDatastore(desiredImageSize, trainingImages, 'ColorPreprocessing', 'gray2rgb'); 
 
 % Skip the softmax and final classification layer
-featureLayer = 'fc1000';
-activationsAtFeatureLayer = activations(featureNetwork, resizedTrainingSet, featureLayer, 'MiniBatchSize', 32, 'OutputAs', 'columns','ExecutionEnvironment','gpu');
+% featureLayer = 'fc1000';
+featureLayer = 'loss3-classifier';
+activationsAtFeatureLayer = activations(featureNetwork, resizedTrainingSet, featureLayer, 'OutputAs', 'columns','ExecutionEnvironment','gpu');
+numFeaturesFound = size(activationsAtFeatureLayer,1); 
 
 %% Train a classifier from the extracted features using SVM
-classifier = fitcecoc(activationsAtFeatureLayer, trainingImages.Labels, 'Learners','linear','Coding','onevsall',ObservationsIn='columns');
+% classifier = fitcecoc(activationsAtFeatureLayer, trainingImages.Labels, 'Learners','linear','Coding','onevsall',ObservationsIn='columns');
 
+classifierLayers = [
+    featureInputLayer(numFeaturesFound);
+% FC layer 1
+fullyConnectedLayer(1000)
+% FC layer 2
+% fullyConnectedLayer(1000)
+% FC layer 3
+fullyConnectedLayer(50)
+% FC layer 4
+fullyConnectedLayer(3)
+% Softmax layer
+softmaxLayer
+% Classification layer
+classificationLayer
+];  
+
+options = trainingOptions('adam', ...
+    'MaxEpochs',20,...
+    'InitialLearnRate',1e-4, ...
+    'L2Regularization',0.0005,'LearnRateSchedule','piecewise',...
+    'Verbose',false, ...
+    'MiniBatchSize',500, ...
+    'Plots','training-progress');
+
+[classifier, trainingInfo] = trainNetwork(activationsAtFeatureLayer', trainingImages.Labels,classifierLayers ,options);
 
 %% Evaluate
 resizeTestingSet = augmentedImageDatastore(desiredImageSize, testingImages,'ColorPreprocessing','gray2rgb'); 
-testFeatures = activations(featureNetwork, resizeTestingSet, featureLayer, 'MiniBatchSize',32, 'OutputAs','columns','ExecutionEnvironment','gpu'); 
-testLabels = predict(classifier, testFeatures, 'ObservationsIn','columns');
+testFeatures = activations(featureNetwork, resizeTestingSet, featureLayer, 'OutputAs','columns','ExecutionEnvironment','gpu'); 
+testLabels = classify(classifier, testFeatures');
 writeOutputFile(testingImages.Files, testLabels); 
