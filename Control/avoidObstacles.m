@@ -33,7 +33,6 @@ prev_point = center_line(:,1); % tracks previous point on center line
 
 obj_dectected = false; % tracks if object is dectected
 obj_location = zeros(size(Xobs{1})); % will store location of object that is detected
-obj_side = 'None'; % stores side object is on
 
 tolerance = 0.75; % tolerance to determine how close object needs to be on trajectory to trigger evasive maneuvers 
 
@@ -100,23 +99,17 @@ while traj_idx < length(center_line)
         
         % %%%%%%% Avoid object %%%%%%%
         % assign whether object is located on left or right side, determined by which minimum distance is smallest
-        if min_dist_right < min_dist_left
-            obj_side = 'Right';
-        else
-            obj_side = 'Left';
-        end
-        
-        if strcmp(obj_side, 'Right')
-            route(:,traj_idx) = (left_track(:,traj_idx)+center_line(:,traj_idx)) ./ 2; 
-        else
+        if min_dist_right < min_dist_left % if object is on right
+            route(:,traj_idx) = (left_track(:,traj_idx)+center_line(:,traj_idx)) ./ 2;
+        else % if object is on left
             route(:,traj_idx) = (right_track(:,traj_idx)+center_line(:,traj_idx)) ./ 2; 
         end
+
     end
     
     % %%%%%%% reset/update values %%%%%%%
     obj_dectected = false;
     obj_location = zeros(size(Xobs{1}));
-    obj_side = 'None';
 
     prev_point = curr_point;
     traj_idx = traj_idx + traj_idx_increment;
