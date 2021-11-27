@@ -3,6 +3,25 @@ clear all
 clc
 
 
+
+%Vehicle parameters
+m = 1400;
+g = 9.806;
+delta_max = [-0.5,0.5];
+Fx_max = [-5000,5000];
+Nw = 2;
+f = 0.01;
+Iz = 2667;
+a = 1.35;
+b = 1.45;
+By = 0.27;
+Cy = 1.2;
+Dy = 0.7;
+Ey = -1.6;
+Shy = 0;
+Svy = 0;
+F_max = 0.7*m*g;
+
 load('TestTrack.mat')
 
 heading = TestTrack.theta;
@@ -27,7 +46,7 @@ interp_size = 1:1/interp_scale:num_points_prior;
 target_path_int = interp1(original_size,target_path',interp_size,'spline')';
 
 
-sec_per_point = 0.7/interp_scale;
+sec_per_point = 1.7/interp_scale;
 
 total_time = num_points_post*sec_per_point;
 
@@ -50,12 +69,12 @@ t_span = 0:control_timestep:total_time;
 
 %Calcualte the path 
 %X,u,Y,v,psi,r
-initial_state = [target_path(1,1);...
-                0;...
-                target_path(2,1);...
-                0;...
-                target_path(3,1);...
-                0];
+% initial_state = [target_path(1,1);...
+%                 0;...
+%                 target_path(2,1);...
+%                 0;...
+%                 target_path(3,1);...
+%                 0];
 
 initial_state = [287;
                  5;
@@ -75,13 +94,13 @@ initial_state = [287;
   
   
 %Controller Gains
-forward_proportional_gain = 1500;
+forward_proportional_gain = 500;
 %forward_bias = 72;
-forward_bias = 130;
+forward_bias = 70;
 
 steering_proportional_gain = 5.5;
  
-steer_lag = 33;
+steer_lag = 16;
 
 
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -106,8 +125,11 @@ states(1,:) = initial_state;
 figure
 hold on
 
-scatter(left_track(1,:), left_track(2,:));
-scatter(right_track(1,:), right_track(2,:));
+plot(left_track(1,:), left_track(2,:), 'r');
+plot(right_track(1,:), right_track(2,:),'b');
+
+ROB535_ControlProject_part1_input = zeros(num_timesteps,2);
+
 for i = 1:num_timesteps
     current_state = states(i,:);
    
@@ -118,7 +140,7 @@ for i = 1:num_timesteps
         %Compare the desired heading and the current heading
         steering_angle_bias = desired_steer(i-steer_lag) - current_state(5);
         %Compare u and the desired forward velocity
-        forward_velocity_error = desired_velocity(i-floor(steer_lag/20)) - current_state(2);
+        forward_velocity_error = desired_velocity(i-floor(steer_lag/33)) - current_state(2);
     else
         steering_angle_bias = desired_steer(i) - current_state(5);
         forward_velocity_error = desired_velocity(i) - current_state(2);
@@ -128,6 +150,33 @@ for i = 1:num_timesteps
     forward_control = forward_proportional_gain*forward_velocity_error+forward_bias;
     steering_control = steering_proportional_gain*steering_angle_bias;
     
+    %Saturation
+    u = current_state(2);
+    v = current_state(4);
+    r = current_state(6);
+    Fzr = a/(a+b)*m*g;
+    alpha_r = rad2deg(-atan((v-b*r)/u));
+    phi_yr = (1-Ey)*(alpha_r + Shy) + Ey/By*atan(By*(alpha_r+Shy));
+    Fyr = Fzr*Dy*sin(Cy*atan(By*phi_yr)+Svy);
+    F_total = sqrt(Nw*forward_control^2 + Fyr^2);
+    if F_total >= F_max
+%         
+        F_x_max = sqrt(F_max^2 - Fyr^2)/Nw;
+        
+        forward_control = F_x_max;
+        
+        %forward_control = F_max/F_total*forward_control;
+       
+        
+    end
+    
+    if forward_control <= Fx_max(1)
+        forward_control = Fx_max(1);
+    end
+
+    if forward_control >= Fx_max(2)
+        forward_control = Fx_max(2);
+    end
     
     %Set the control input
     control_input = [prev_control;...
@@ -135,6 +184,7 @@ for i = 1:num_timesteps
                  
     prev_control = [steering_control,forward_control];
     
+    ROB535_ControlProject_part1_input(i,:) = [steering_control,forward_control];
     
     %Forward integrate to get the new state
     [Y,~] = forwardIntegrateControlInput(control_input, current_state);
@@ -154,8 +204,12 @@ for i = 1:num_timesteps
 
 end
 
-scatter(states(:,1), states(:,3), 'r')
-scatter(expected_path(:,1), expected_path(:,2),'g')
+plot(states(:,1), states(:,3), 'r')
+plot(expected_path(:,1), expected_path(:,2),'g')
+
+path = [states(:,1),states(:,3)];
+
+getTrajectoryInfo(path,ROB535_ControlProject_part1_input)
 
 
 function[desired_velocity, desired_steer, expected_path] = path_at_t(t, sec_per_points, target_path,interp_scale)
