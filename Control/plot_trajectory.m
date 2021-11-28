@@ -46,7 +46,7 @@ interp_size = 1:1/interp_scale:num_points_prior;
 target_path_int = interp1(original_size,target_path',interp_size,'spline')';
 
 
-sec_per_point = 1.7/interp_scale;
+sec_per_point = 0.5/interp_scale;
 
 total_time = num_points_post*sec_per_point;
 
@@ -96,11 +96,14 @@ initial_state = [287;
 %Controller Gains
 forward_proportional_gain = 500;
 %forward_bias = 72;
-forward_bias = 70;
+forward_bias = 100;
 
 steering_proportional_gain = 5.5;
  
-steer_lag = 16;
+steer_lag = -40;
+
+
+%Path generation
 
 
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -150,7 +153,19 @@ for i = 1:num_timesteps
     forward_control = forward_proportional_gain*forward_velocity_error+forward_bias;
     steering_control = steering_proportional_gain*steering_angle_bias;
     
+    
+    
     %Saturation
+    if forward_control > Fx_max(2)
+       forward_control = Fx_max(2);
+    end
+
+    if forward_control < Fx_max(1)
+       forward_control = Fx_max(1);
+    end
+
+    
+    %Set constraints based total traction
     u = current_state(2);
     v = current_state(4);
     r = current_state(6);
@@ -170,13 +185,22 @@ for i = 1:num_timesteps
         
     end
     
-    if forward_control <= Fx_max(1)
-        forward_control = Fx_max(1);
-    end
-
-    if forward_control >= Fx_max(2)
-        forward_control = Fx_max(2);
-    end
+   if forward_control > Fx_max(2)
+       forward_control = Fx_max(2);
+   end
+   
+   if forward_control < Fx_max(1)
+       forward_control = Fx_max(1);
+   end
+   
+   
+   if steering_control > delta_max(2)
+       steering_control = delta_max(2);
+   end
+   
+   if steering_control < delta_max(1)
+       steering_control = delta_max(1);
+   end
     
     %Set the control input
     control_input = [prev_control;...
@@ -197,22 +221,25 @@ for i = 1:num_timesteps
     
     
     if mod(i,500*sec_per_point/control_timestep) == 0
-        scatter(states(1:i,1), states(1:i,3), 'r')
-        scatter(expected_path(1:i,1), expected_path(1:i,2),'g')
+        %scatter(states(1:i,1), states(1:i,3), 'r')
+        %scatter(expected_path(1:i,1), expected_path(1:i,2),'g')
         disp(i)
     end
 
 end
 
-plot(states(:,1), states(:,3), 'r')
+plot(states(:,1), states(:,3), 'c')
 plot(expected_path(:,1), expected_path(:,2),'g')
 
 path = [states(:,1),states(:,3)];
 
 getTrajectoryInfo(path,ROB535_ControlProject_part1_input)
 
+save('ROB535_ControlProject_part1_input.mat','ROB535_ControlProject_part1_input')
 
 function[desired_velocity, desired_steer, expected_path] = path_at_t(t, sec_per_points, target_path,interp_scale)
+
+initial_buffer = 8;
 
 last_point = size(target_path,2);
 
@@ -220,7 +247,7 @@ last_point = size(target_path,2);
 past_point_idx = floor(t./sec_per_points)+1;
 
 %Append a few points to the start to let the car catch up
-past_point_idx = [ones(1,0*interp_scale+1),past_point_idx];
+past_point_idx = [ones(1,initial_buffer*interp_scale+1),past_point_idx];
 
 
 %Make sure that you do not go out of bounds
