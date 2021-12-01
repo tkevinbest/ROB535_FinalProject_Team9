@@ -1,26 +1,15 @@
 clear
 clc
-
+tic
 %% Vehicle Parameters
 % Input limits 
 delta_lim = [-0.5, 0.5];
 Fx_lim = [-5000, 5000];
 
 % Constants
-m = 1400;
-Nw = 2;
-f = 0.01;
-Iz = 2667;
-a = 1.35;
-b = 1.45;
-By = 0.27;
-Cy = 1.2;
-Dy = 0.7;
-Ey = -1.6;
-Shy = 0;
-Svy = 0;
-g = 9.806;
-dt = 0.01;
+m = 1400; Nw = 2; f = 0.01; Iz = 2667; a = 1.35; 
+b = 1.45; By = 0.27; Cy = 1.2; Dy = 0.7; Ey = -1.6; 
+Shy = 0; Svy = 0; g = 9.806; dt = 0.01;
 
 % Reference trajectories
 U_Ref = ones(2,17150);
@@ -84,7 +73,7 @@ B = @(i) dt*[                                 0,     0
 
 %% Number of decision variables for colocation method
 npred=10;
-Ndec = 3*(npred+1) + 2*(npred);
+Ndec = 6*(npred+1) + 2*(npred);
 
 %% Testing Equality Constraints
 idx = 1;
@@ -99,22 +88,23 @@ idx = 1;
 %% Simulate
 
 % Initialize
-Q = [1 0 0; 0 1 0; 0 0 0.5];
+Q = eye(6);
+Q(3,3) = 0.5;
 R = [0.1 0; 0 0.01];
 
 T = 0:dt:1;
-Y_tilde = zeros(3,601-npred);
-Y_tilde(:,1) = [0.25;-0.25;-0.1];
-Y = zeros(3,601-npred);
-Y(:,1) = Y_tilde(:,1) + Y_ref(:,1);
+Y_tilde = zeros(6,17150-npred);
+Y_tilde(:,1) = [287;5;-176;0;2;0];
+Y = zeros(6,17150-npred);
+Y(:,1) = Y_tilde(:,1) + Y_Ref(:,1);
 
 % Form H and f
-H1 = kron(eye(11),Q); H2 = kron(eye(10),R); H3 = zeros(33,20);
+H1 = kron(eye(11),Q); H2 = kron(eye(10),R); H3 = zeros(66,20);
 H = [H1,H3; H3',H2];
 f = zeros(Ndec,1);
 
 % Loop through 
-for i = 1:length(Y_ref)-10
+for i = 1:length(Y_Ref)-10
     % Redefine initial condition for given step
     Y0_tilde = Y_tilde(:,i);
     Y0 = Y(:,i);
@@ -128,15 +118,42 @@ for i = 1:length(Y_ref)-10
     
     % Extract input + save for later plotting
     U_tilde(:,i) = zstar_tilde(34:35);
-    U(:,i) = U_tilde(:,i) + U_ref(:,i);
+    U(:,i) = U_tilde(:,i) + U_Ref(:,i);
     
     % Simulate using ode45 (actual dynamics)
     [t, Ysim] = ode45(@(t,x)odefun(x,U(:,i)),T,Y0);
     Ysim = Ysim';
     Y(:,i+1) = Ysim(:,2);
-    Y_tilde(:,i+1) = Y(:,i+1) - Y_ref(:,i+1);
+    Y_tilde(:,i+1) = Y(:,i+1) - Y_Ref(:,i+1);
     
 end
+time = toc;
+fprintf('Time: %0.3f\n',time)
+
+%% Plotting
+% subplot(3,1,1)
+plot(Y_Ref(1,:),Y_Ref(3,:))
+hold on
+plot(Y(1,:),Y(3,:))
+hold off
+ylabel('y'); xlabel('x')
+legend('Ref','Actual')
+
+% subplot(3,1,2)
+% plot(Y_Ref(1,:), U_Ref(1,:))
+% hold on
+% plot(Y(1,1:end-1), U(1,:))
+% hold off
+% ylabel('u'); xlabel('x')
+% legend('Ref','Actual')
+
+% subplot(3,1,3)
+% plot(Y_Ref(1,:), U_Ref(2,:))
+% hold on
+% plot(Y(1,1:end-1), U(2,:))
+% hold off
+% ylabel('delta'); xlabel('x')
+% legend('Ref','Actual')
 
 %% Functions
 function [Aeq,beq]=eq_cons(idx,A,B,z0,npred)
@@ -193,5 +210,33 @@ for i = idx:idx+npred-1
      
     count = count+2;
 end
+end
 
+function [dx] = odefun(x,u)
+    % Constants
+    m = 1400; Nw = 2; f = 0.01; Iz = 2667;
+    a = 1.35; b = 1.45; By = 0.27; Cy = 1.2;
+    Dy = 0.7; Ey = -1.6; Shy = 0; Svy = 0;
+    g = 9.806; dt = 0.01;
+
+    % Slip angles
+    alpha_f = u(1) - atan(x(4) + a*x(6) ./ x(2));
+    alpha_r = - atan(x(4) - b*x(6) ./ x(2));
+    % 
+    phi_yf = (1 - Ey) * (alpha_f + Shy) + (Ey/By)*atan(By*(alpha_f + Shy));
+    phi_yr = (1 - Ey) * (alpha_r + Shy) + (Ey/By)*atan(By*(alpha_r + Shy));
+    % Forces
+    Fzf = (b / (a + b)) * m * g;
+    Fyf = Fzf * Dy * sin(Cy*atan(By*phi_yf)) + Svy;
+    Fzr = (a / (a + b)) * m * g;
+    Fyr = Fzr * Dy * sin(Cy*atan(By*phi_yr)) + Svy;
+
+
+    dx = [x(2)*cos(x(5)) - x(4)*sin(x(5));
+          (1/m)*(-f*m*g + Nw*u(2) - Fyf*sin(u(1)) + x(4)*x(6));
+          x(2)*sin(x(5)) + x(4)*cos(x(5));
+          (1/m)*(Fyf*cos(u(1))+Fyr) - x(2)*x(6);
+          x(6);
+          (1/Iz)*(a*Fyf*cos(u(1)) - b*Fyr)];
+        
 end
