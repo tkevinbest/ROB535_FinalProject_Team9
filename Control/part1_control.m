@@ -46,7 +46,7 @@ interp_size = 1:1/interp_scale:num_points_prior;
 target_path_int = interp1(original_size,target_path',interp_size,'spline')';
 
 
-sec_per_point = 0.5/interp_scale;
+sec_per_point = 0.23/interp_scale;
 
 total_time = num_points_post*sec_per_point;
 
@@ -94,13 +94,13 @@ initial_state = [287;
   
   
 %Controller Gains
-forward_proportional_gain = 500;
+forward_proportional_gain = 1000;
 %forward_bias = 72;
 forward_bias = 100;
 
 steering_proportional_gain = 5.5;
  
-steer_lag = -40;
+steer_lag = -80;
 
 
 %Path generation
@@ -239,12 +239,17 @@ save('ROB535_ControlProject_part1_input.mat','ROB535_ControlProject_part1_input'
 
 function[desired_velocity, desired_steer, expected_path] = path_at_t(t, sec_per_points, target_path,interp_scale)
 
-initial_buffer = 8;
+%Calibration variable - repeats first velocity so car can get up to speed
+initial_buffer = 15;
 
+
+%Understand where you want to end up 
 last_point = size(target_path,2);
+
 
 %Get the index of the past set point
 past_point_idx = floor(t./sec_per_points)+1;
+
 
 %Append a few points to the start to let the car catch up
 past_point_idx = [ones(1,initial_buffer*interp_scale+1),past_point_idx];
@@ -252,6 +257,7 @@ past_point_idx = [ones(1,initial_buffer*interp_scale+1),past_point_idx];
 
 %Make sure that you do not go out of bounds
 past_point_idx(:,past_point_idx > last_point-1) = last_point-1;
+
 
 %Add points int the end to make sure that you get to the last point
 past_point_idx = [past_point_idx, (last_point-1)*ones(1,200)];

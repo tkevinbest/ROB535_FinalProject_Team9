@@ -1,53 +1,4 @@
-close all
-clear
-
-%% Load/plot track and obstacles
-load('TestTrack.mat')
-
-heading = TestTrack.theta;
-left_track = TestTrack.bl;
-right_track = TestTrack.br;
-center_line = TestTrack.cline;
-
-% generate obstacles
-Nobs = 10; % number of obstacles
-Xobs = generateRandomObstacles(Nobs);
-
-% plot track and obstacles
-figure(1)
-hold on
-plot(left_track(1,:), left_track(2,:),'k');
-plot(right_track(1,:), right_track(2,:),'k');
-scatter(center_line(1,:), center_line(2,:));
-
-for i = 1:Nobs
-    obj = line([Xobs{i}(:,1)', Xobs{i}(1,1)],[Xobs{i}(:,2)',Xobs{i}(1,2)]);
-    set(obj,'LineWidth',1,'Color','r');
-end
-
-%% Plan/plot route around obstacles
-
-% define parameters
-route = center_line; % vector to store route; initialize to be the centerline
-prev_point = center_line(:,1); % tracks previous point on center line
-
-obj_dectected = false; % tracks if object is dectected
-obj_location = zeros(size(Xobs{1})); % will store location of object that is detected
-
-tolerance = 0.8; % tolerance to determine how close object needs to be on trajectory to trigger evasive maneuvers
-tolerance_obj_dist = 15; % tolerance to determine how close object needs to be on trajectory to trigger evasive maneuvers
-
-num_points = 10; % number of points to create between two points in trajectory
-traj_idx = 2; % stores where we are in trajectory
-traj_idx_increment = 1; % stores how much to increase trajectory counter by
-
-j = 1; %objects are presented in order
-
-route = avoidObstaclesFun(center_line,Xobs,traj_idx,length(center_line), TestTrack);
-% plot final route
-plot(route(1,:),route(2,:),'b')
-%% plan route
-function route = avoidObstaclesFun(curr_route, Xobs, traj_idx_start, traj_idx_end, TestTrack)
+function route = avoidObstacles(curr_route, Xobs, traj_idx_start, traj_idx_end, TestTrack)
 left_track = TestTrack.bl;
 right_track = TestTrack.br;
 route = TestTrack.cline;
@@ -61,7 +12,7 @@ obj_location = zeros(size(Xobs{1})); % will store location of object that is det
 
 tolerance = 0.8; % tolerance to determine how close object needs to be on trajectory to trigger evasive maneuvers
 tolerance_obj_dist = 15; % tolerance to determine how close object needs to be on trajectory to trigger evasive maneuvers
-object_avoid_buff = 2;
+object_avoid_buff = 4;
 
 num_points = 10; % number of points to create between two points in trajectory
 traj_idx = 2; % stores where we are in trajectory
@@ -131,6 +82,12 @@ while traj_idx < traj_idx_end
     
     
 end
+% Set Heading
+heading = atan2(diff(route(2,:)),diff(route(1,:)));
+heading(end+1) = heading(end);
+
+route(3,:) = heading;
+
 end
 
 function point = center_obs(obs)
