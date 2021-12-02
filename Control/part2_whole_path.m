@@ -66,7 +66,7 @@ interp_size = 1:1/interp_scale:num_points_prior;
 target_path_int = interp1(original_size,target_path',interp_size,'spline')';
 
 
-sec_per_point = 2.1/interp_scale;
+sec_per_point = 1.0/interp_scale;
 
 total_time = num_points_post*sec_per_point;
 
