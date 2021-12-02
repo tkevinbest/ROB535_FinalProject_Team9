@@ -1,5 +1,5 @@
 close all 
-clear all
+% clear all
 clc
 
 %Vehicle parameters
@@ -71,6 +71,7 @@ sec_per_point = 2.1/interp_scale;
 total_time = num_points_post*sec_per_point;
 
 control_timestep = 0.01; 
+dt = control_timestep;
 
 t_span = 0:control_timestep:total_time;
 
@@ -114,16 +115,22 @@ initial_state = [287;
   
   
 %Controller Gains
-forward_proportional_gain = 400;
+forward_proportional_gain = 3000;
 %forward_bias = 72;
-forward_bias = 85;
+forward_bias = 0;
 
-steering_proportional_gain = 13.5;
+steering_proportional_gain = 7.5;
  
 %steer_lag = -45;
-steer_lag = -30;
+steer_lag = 0;
 
 %Path generation
+
+
+%Integral accumulator
+heading_accumulator = 0;
+steering_integral_gain = 0.2;
+heading_accumulator_saturation = 1;
 
 
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -161,17 +168,54 @@ for i = 1:num_timesteps
     %lag into steering to make sure we are not turning sooner than expected
     if i > steer_lag
         %Compare the desired heading and the current heading
-        steering_angle_bias = desired_steer(i-steer_lag) - current_state(5);
+        steering_angle_error = desired_steer(i-steer_lag) - current_state(5);
         %Compare u and the desired forward velocity
         forward_velocity_error = desired_velocity(i-floor(steer_lag/33)) - current_state(2);
+        
+
+        %Add integral gain to steering
+         
+        curr_heading = current_state(5);
+        
+        R = [cos(-curr_heading), -sin(-curr_heading);
+             sin(-curr_heading), cos(-curr_heading)];
+        
+        cur_pos = [current_state(1);current_state(3)];
+        exp_pos = [expected_path(i,1);expected_path(i,2)];
+        rot_curr_pos = R * cur_pos;
+        rot_exp_pos = R * exp_pos;
+        
+        %IF y of current_position is greater, you are to the right
+        % if you are to the left, you want positive sign, therefore
+        % subtract expected y from current y
+        angle_sign = sign(rot_exp_pos(2) - rot_curr_pos(2));
+
+        distance_from_center_line = ((cur_pos(1)-exp_pos(1))^2 ...
+                                   + (cur_pos(2)- exp_pos(2))^2)^0.5;
+
+        heading_accumulator = heading_accumulator + angle_sign*distance_from_center_line*dt;
+        
+        
+        if heading_accumulator > heading_accumulator_saturation
+            heading_accumulator = heading_accumulator_saturation;
+        end
+        if heading_accumulator < -heading_accumulator_saturation
+            heading_accumulator = -heading_accumulator_saturation;
+        end
+        
     else
-        steering_angle_bias = desired_steer(i) - current_state(5);
+        steering_angle_error = desired_steer(i) - current_state(5);
         forward_velocity_error = desired_velocity(i) - current_state(2);
 
     end
+    
+    
+    
+    
     %Calculate control
     forward_control = forward_proportional_gain*forward_velocity_error+forward_bias;
-    steering_control = steering_proportional_gain*steering_angle_bias;
+    steering_control = steering_proportional_gain*steering_angle_error ...
+                     + steering_integral_gain*heading_accumulator;
     
     
     
@@ -194,6 +238,8 @@ for i = 1:num_timesteps
     phi_yr = (1-Ey)*(alpha_r + Shy) + Ey/By*atan(By*(alpha_r+Shy));
     Fyr = Fzr*Dy*sin(Cy*atan(By*phi_yr)+Svy);
     F_total = sqrt(Nw*forward_control^2 + Fyr^2);
+    
+    
     if F_total >= F_max
 %         
         F_x_max = sqrt(F_max^2 - Fyr^2)/Nw;
@@ -240,7 +286,7 @@ for i = 1:num_timesteps
     
     
     
-    if mod(i,5*sec_per_point/control_timestep) == 0
+    if mod(i,50*sec_per_point/control_timestep) == 0
 %         scatter(states(1:i,1), states(1:i,3), 'c')
 %         scatter(expected_path(1:i,1), expected_path(1:i,2),'g')
 %         for k = 1:Nobs
@@ -262,16 +308,29 @@ for k = 1:Nobs
 end
 
 
+figure
+plot(sqrt(states(:,2).^2 + states(:,4).^2))
+hold on
+plot(desired_velocity)
+legend('actual velocity', 'desired velocity')
+title("Velocity vs iteration")
+figure
+plot(states(:,5))
+hold on 
+plot(desired_steer)
+legend('actual steer', 'desired steer')
+title("Steering vs iteration")
+
 path = [states(:,1),states(:,3)];
 
-getTrajectoryInfo(path,ROB535_ControlProject_part1_input)
+getTrajectoryInfo(path,ROB535_ControlProject_part1_input,Xobs)
 
 save('ROB535_ControlProject_part1_input.mat','ROB535_ControlProject_part1_input')
 
 function[desired_velocity, desired_steer, expected_path] = path_at_t(t, sec_per_points, target_path,interp_scale)
 
 %Calibration variable - repeats first velocity so car can get up to speed
-initial_buffer = 15;
+initial_buffer = 0;
 
 
 %Understand where you want to end up 
