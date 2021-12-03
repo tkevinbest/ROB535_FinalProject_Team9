@@ -1,4 +1,4 @@
-function [Y,U,t_total,t_update] = forwardIntegrate()
+function [Y,U,t_total,t_update,Xobs] = forwardIntegrate()
 % [Y,U,t_total,t_update] = forwardIntegrate
 % 
 % This script returns the vehicle trajectory with control input being
@@ -112,5 +112,6 @@ function [Y,U,t_total,t_update] = forwardIntegrate()
     Y(idx_temp:end,:) = [];
     U(idx_temp:end,:) = [];
     t_update(iteration:end) = [];
+    getTrajectoryInfo(Y,U,Xobs)
 
 end
