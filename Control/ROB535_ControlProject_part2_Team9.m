@@ -41,19 +41,6 @@ F_max = 0.7*m*g;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
-%Calculate the new path based on the current position
-original_center_line = TestTrack.cline;
-x = curr_state(1);
-y = curr_state(3);
-
-idx_start = knnsearch(original_center_line',[x,y]);
-
-%Start a little bit ahead of the initial point
-if(idx_start == 1)
-    idx_start = 2;
-end 
-
-
 %Crop based on idx_start
 heading = TestTrack.theta;
 left_track = TestTrack.bl;
@@ -108,7 +95,7 @@ target_path_int = interp1(original_size_vector,target_path',interp_size_vector,'
 
 %Define the time it takes to go from one point to another (in the original,
 %276 point array)
-sec_per_point = 2.0/interp_scale;
+sec_per_point = 1.4/interp_scale;
 
 %Calculate the total time in seconds in takes to run the course
 total_time = num_points_post*sec_per_point;
@@ -118,7 +105,7 @@ control_timestep = 0.01;
 dt_ = control_timestep;
 
 %Set the total time
-t_span = 0:control_timestep:total_time;
+t_span = 0:control_timestep:total_time*1.02;
 
 
 %Calculate the reference trajectories for velocity and steering with
@@ -159,8 +146,8 @@ steer_lag = 0;
 
 %Integral accumulator
 heading_accumulator = 0;
-steering_integral_gain = 0.2;
-heading_accumulator_saturation = 1;
+steering_integral_gain = 0.8;
+heading_accumulator_saturation = 2;
 
 
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -188,8 +175,22 @@ control = zeros(num_timesteps+1,2);
 % Main control loop %
 %%%%%%%%%%%%%%%%%%%%%
 
-idx_start_scaled = idx_start * interp_scale;
-idx_expected_path = idx_start_scaled:idx_start_scaled + num_timesteps;
+
+%Calculate the new path based on the current position
+desired_center_line = expected_path(:,1:2)';
+x = curr_state(1);
+y = curr_state(3);
+
+idx_start = knnsearch(desired_center_line',[x,y]) + 1;
+
+%Start a little bit ahead of the initial point
+if(idx_start == 1)
+    idx_start = 2;
+end 
+
+percent_done = idx_start/size(expected_path,1)
+
+idx_expected_path = idx_start:idx_start + num_timesteps;
 
 for i =  1:num_timesteps
     
@@ -313,8 +314,29 @@ for i =  1:num_timesteps
 end
 
 %Plot the track and the positions
-hold on 
 
+% 
+% figure(1)
+% clf(1)
+% plot(idx_expected_path, sqrt(states(:,2).^2 + states(:,4).^2))
+% hold on
+% plot(desired_velocity)
+% legend('actual velocity', 'desired velocity')
+% title("Velocity vs iteration")
+% 
+% 
+% figure(2)
+% clf(2)
+% plot(idx_expected_path,  states(:,5))
+% hold on 
+% plot(desired_steer)
+% legend('actual steer', 'desired steer')
+% title("Steering vs iteration")
+% 
+% %Output
+% figure(3)
+% hold on 
+% 
 % plot(left_track(1,:), left_track(2,:), 'r');
 % plot(right_track(1,:), right_track(2,:),'b');
 % plot(states(:,1), states(:,3), 'c')
@@ -326,25 +348,9 @@ hold on
 % disp(i)
 % delete(expcted_path_plot)
 
-figure(1)
-plot(idx_expected_path, sqrt(states(:,2).^2 + states(:,4).^2))
-hold on
-plot(desired_velocity)
-legend('actual velocity', 'desired velocity')
-title("Velocity vs iteration")
-
-
-figure(2)
-plot(idx_expected_path,  states(:,5))
-hold on 
-plot(desired_steer)
-legend('actual steer', 'desired steer')
-title("Steering vs iteration")
-
-%Output
 
 sol_2 = control;
-if size(target_path,2) == 2
+if percent_done > 0.97
     FLAG_terminate = true;
 else
     FLAG_terminate = false;
@@ -414,8 +420,8 @@ function route = avoidObstacles(curr_route, Xobs, traj_idx_start, traj_idx_end, 
         obj_location = zeros(size(Xobs{1})); % will store location of object that is detected
 
         tolerance = 0.8; % tolerance to determine how close object needs to be on trajectory to trigger evasive maneuvers
-        tolerance_obj_dist = 15; % tolerance to determine how close object needs to be on trajectory to trigger evasive maneuvers
-        object_avoid_buff = 4;
+        tolerance_obj_dist = 17; % tolerance to determine how close object needs to be on trajectory to trigger evasive maneuvers
+        object_avoid_buff = 3;
 
         num_points = 10; % number of points to create between two points in trajectory
         traj_idx = 2; % stores where we are in trajectory

@@ -1,6 +1,9 @@
 clear all
 close all
 
+[Y,U,t_total,t_update,Xobs] = forwardIntegrate()
+
+
 
 load('TestTrack.mat')
 
@@ -11,9 +14,6 @@ right_track = TestTrack.br;
 plot(left_track(1,:), left_track(2,:), 'r');
 hold on 
 plot(right_track(1,:), right_track(2,:),'b');
-
-[Y,U,t_total,t_update,Xobs] = forwardIntegrate()
-
 
 
 plot(Y(:,1),Y(:,3))
