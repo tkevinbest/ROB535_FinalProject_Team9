@@ -1,9 +1,9 @@
-function writeBboxes(trainingImages)
+function writeBboxes(imagesDatastore)
 
-bboxFiles = strrep(trainingImages.Files, '_image.jpg', '_bbox.bin');
-projMatFiles = strrep(trainingImages.Files, '_image.jpg', '_proj.bin');
+bboxFiles = strrep(imagesDatastore.Files, '_image.jpg', '_bbox.bin');
+projMatFiles = strrep(imagesDatastore.Files, '_image.jpg', '_proj.bin');
 
-im = imread(trainingImages.Files{1});
+im = imread(imageDatastore.Files{1});
 im_sz = size(im);
 
 bboxes = cell(numel(bboxFiles), 1);
@@ -40,6 +40,6 @@ for i = 1:numel(bboxFiles)
     bboxes{i, 1} = [x y w h]; 
 end
 
-bboxTable = table(trainingImages.Files, bboxes, 'VariableNames', {'imagesFile', 'vehicle'});
+bboxTable = table(imageDatastore.Files, bboxes, 'VariableNames', {'imagesFile', 'vehicle'});
 save('boundingBoxes.mat', 'bboxTable')
 end
