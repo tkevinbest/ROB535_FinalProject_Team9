@@ -12,6 +12,8 @@ trainLabels = readtable((fullfile(imageFolder_Training, 'labels.csv')));
 trainingImages = imageDatastore(imageFolder_Training,'IncludeSubfolders',true, 'Labels',categorical(trainLabels.label)); 
 testingImages = imageDatastore(imageFolder_Testing, 'IncludeSubfolders',true); 
 
+
+
 %% Examples to make sure things worked
 % Make a subplot of the first 3 types of images
 showImages = false; 
@@ -37,19 +39,31 @@ minExamples = median(imageCounts.Count);
 
 %% Load pretrained network for feature extraction
 % featureNetwork = resnet50(); 
-featureNetwork = googlenet(); 
+% featureNetwork = googlenet(); 
 % featureNetwork = resnet101();
+featureNetwork = nasnetlarge(); 
 
 desiredImageSize = featureNetwork.Layers(1).InputSize; 
-resizedTrainingSet = augmentedImageDatastore(desiredImageSize, trainingImages, 'ColorPreprocessing', 'gray2rgb'); 
+dataAugmenter = imageDataAugmenter('RandXReflection', true, ...
+                                   'RandRotation', [-15, 15], ...
+                                   'RandScale', [0.25, 1.5], ...
+                                   'RandXTranslation', [-10, 10], ...
+                                   'RandYTranslation', [-5, 5]);
 
+trainingSet = trainingImages;
+
+resizedTrainingSet = augmentedImageDatastore(desiredImageSize, trainingSet, 'DataAugmentation', dataAugmenter); 
+
+%% Train a classifier from the extracted features using MLP
 % Skip the softmax and final classification layer
 % featureLayer = 'fc1000';
-featureLayer = 'loss3-classifier';
-activationsAtFeatureLayer = activations(featureNetwork, resizedTrainingSet, featureLayer, 'OutputAs', 'columns','ExecutionEnvironment','gpu');
+% featureLayer = 'loss3-classifier';
+% featureLayer = 'predictions';
+featureLayer = 'global_average_pooling2d_2';
+activationsAtFeatureLayer = activations(featureNetwork, resizedTrainingSet, featureLayer, 'OutputAs', 'columns', 'MiniBatchSize',50);
 numFeaturesFound = size(activationsAtFeatureLayer,1); 
 
-%% Train a classifier from the extracted features using SVM
+%% Train a classifier from the extracted features using an MLP
 % classifier = fitcecoc(activationsAtFeatureLayer, trainingImages.Labels, 'Learners','linear','Coding','onevsall',ObservationsIn='columns');
 
 classifierLayers = [
@@ -57,9 +71,9 @@ classifierLayers = [
 % FC layer 1
 fullyConnectedLayer(1000)
 % FC layer 2
-% fullyConnectedLayer(1000)
+fullyConnectedLayer(500)
 % FC layer 3
-fullyConnectedLayer(50)
+fullyConnectedLayer(100)
 % FC layer 4
 fullyConnectedLayer(3)
 % Softmax layer
@@ -68,18 +82,26 @@ softmaxLayer
 classificationLayer
 ];  
 
+idx = randperm(size(activationsAtFeatureLayer,2),500);
+XValidation = activationsAtFeatureLayer(:,idx);
+activationsAtFeatureLayer(:,idx) = [];
+labels = trainingImages.Labels;
+YValidation = trainingImages.Labels(idx);
+labels(idx) = [];
+
 options = trainingOptions('adam', ...
-    'MaxEpochs',20,...
+    'MaxEpochs',100,...
+    'ValidationData',{XValidation',YValidation}, ...
     'InitialLearnRate',1e-4, ...
-    'L2Regularization',0.0005,'LearnRateSchedule','piecewise',...
+    'L2Regularization',0.0075,'LearnRateSchedule','piecewise',...
     'Verbose',false, ...
-    'MiniBatchSize',500, ...
+    'MiniBatchSize',200, ...
     'Plots','training-progress');
 
-[classifier, trainingInfo] = trainNetwork(activationsAtFeatureLayer', trainingImages.Labels,classifierLayers ,options);
+[classifier, trainingInfo] = trainNetwork(activationsAtFeatureLayer', labels, classifierLayers, options);
 
 %% Evaluate
-resizeTestingSet = augmentedImageDatastore(desiredImageSize, testingImages,'ColorPreprocessing','gray2rgb'); 
-testFeatures = activations(featureNetwork, resizeTestingSet, featureLayer, 'OutputAs','columns','ExecutionEnvironment','gpu'); 
+resizeTestingSet = augmentedImageDatastore(desiredImageSize, testingImages); 
+testFeatures = activations(featureNetwork, resizeTestingSet, featureLayer, 'OutputAs','columns','ExecutionEnvironment','gpu', 'MiniBatchSize',50); 
 testLabels = classify(classifier, testFeatures');
 writeOutputFile(testingImages.Files, testLabels); 
