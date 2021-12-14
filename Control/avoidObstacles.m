@@ -1,52 +1,27 @@
-close all
-clear
-
-%% Load/plot track and obstacles
-load('TestTrack.mat')
-
-heading = TestTrack.theta;
+function route = avoidObstacles(curr_route, Xobs, traj_idx_start, traj_idx_end, TestTrack)
 left_track = TestTrack.bl;
 right_track = TestTrack.br;
-center_line = TestTrack.cline;
+route = TestTrack.cline;
 
-% generate obstacles
-Nobs = 10; % number of obstacles
-Xobs = generateRandomObstacles(Nobs);
-
-% plot track and obstacles
-figure(1)
-hold on
-plot(left_track(1,:), left_track(2,:),'k');
-plot(right_track(1,:), right_track(2,:),'k');
-scatter(center_line(1,:), center_line(2,:));
-
-for i = 1:Nobs
-    obj = line([Xobs{i}(:,1)', Xobs{i}(1,1)],[Xobs{i}(:,2)',Xobs{i}(1,2)]);
-    set(obj,'LineWidth',1,'Color','r');
-end
-
-%% Plan/plot route around obstacles
-
-% define parameters
-route = center_line; % vector to store route; initialize to be the centerline
-prev_point = center_line(:,1); % tracks previous point on center line
+traj_idx = traj_idx_start;
+curr_point = curr_route(:,traj_idx);
+prev_point = curr_route(:,traj_idx-1);
 
 obj_dectected = false; % tracks if object is dectected
 obj_location = zeros(size(Xobs{1})); % will store location of object that is detected
 
 tolerance = 0.8; % tolerance to determine how close object needs to be on trajectory to trigger evasive maneuvers
 tolerance_obj_dist = 15; % tolerance to determine how close object needs to be on trajectory to trigger evasive maneuvers
+object_avoid_buff = 4;
 
 num_points = 10; % number of points to create between two points in trajectory
 traj_idx = 2; % stores where we are in trajectory
 traj_idx_increment = 1; % stores how much to increase trajectory counter by
 
-j = 1; %objects are presented in order
-avoid_step = 0;
+j = 1; %object number CHANGE WHEN PASSING ONE OBJ
 
-% plan route
-while traj_idx < length(center_line)
-    curr_point = center_line(:,traj_idx);
+while traj_idx < traj_idx_end
+    curr_point = curr_route(:,traj_idx);
     
     % %%%%%%% Detect Collisions %%%%%%%
     % interpolate line between current point and previous
@@ -80,17 +55,17 @@ while traj_idx < length(center_line)
         % find closest points on left and right side of track respectively to detected object
                 obs_center = center_obs(obj_location);
 
-        [idx_right, dist_right] = knnsearch(right_track(:,traj_idx)', obs_center);
-        [idx_left, dist_left] = knnsearch(left_track(:,traj_idx)', obs_center);
+        [~, dist_right] = knnsearch(right_track(:,traj_idx)', obs_center);
+        [~, dist_left] = knnsearch(left_track(:,traj_idx)', obs_center);
 
         % %%%%%%% Avoid object %%%%%%%
         % assign whether object is located on left or right side, determined by which minimum distance is smallest
         if dist_right < dist_left % if object is on right
-            route(:,traj_idx:traj_idx+1) = (left_track(:,traj_idx:traj_idx+1)+center_line(:,traj_idx:traj_idx+1)) ./ 2;
+            route(:,traj_idx:traj_idx+object_avoid_buff) = (left_track(:,traj_idx:traj_idx+object_avoid_buff)+curr_route(:,traj_idx:traj_idx+object_avoid_buff)) ./ 2;
             disp(['Zagged RIGHT to avoid Object ' num2str(j)])
             
         else % if object is on left
-            route(:,traj_idx:traj_idx+1) = (right_track(:,traj_idx:traj_idx+1)+center_line(:,traj_idx:traj_idx+1)) ./ 2;
+            route(:,traj_idx:traj_idx+object_avoid_buff) = (right_track(:,traj_idx:traj_idx+object_avoid_buff)+curr_route(:,traj_idx:traj_idx+object_avoid_buff)) ./ 2;
             disp(['Zigged LEFT to avoid Object ' num2str(j)])
         end
         
@@ -98,7 +73,7 @@ while traj_idx < length(center_line)
     end
     
     % %%%%%%% reset/update values %%%%%%%
-    plot(route(1,1:traj_idx),route(2,1:traj_idx),'b')
+%     plot(route(1,1:traj_idx),route(2,1:traj_idx),'b')
     obj_dectected = false;
     obj_location = zeros(size(Xobs{1}));
     
@@ -107,8 +82,13 @@ while traj_idx < length(center_line)
     
     
 end
-% plot final route
-plot(route(1,:),route(2,:),'b')
+% Set Heading
+heading = atan2(diff(route(2,:)),diff(route(1,:)));
+heading(end+1) = heading(end);
+
+route(3,:) = heading;
+
+end
 
 function point = center_obs(obs)
     point(1) = mean(obs(:,1));
