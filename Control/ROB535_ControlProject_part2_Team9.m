@@ -333,7 +333,7 @@ end
 % legend('actual steer', 'desired steer')
 % title("Steering vs iteration")
 % 
-% %Output
+% Output
 % figure(3)
 % hold on 
 % 
@@ -420,8 +420,9 @@ function route = avoidObstacles(curr_route, Xobs, traj_idx_start, traj_idx_end, 
         obj_location = zeros(size(Xobs{1})); % will store location of object that is detected
 
         tolerance = 0.8; % tolerance to determine how close object needs to be on trajectory to trigger evasive maneuvers
-        tolerance_obj_dist = 17; % tolerance to determine how close object needs to be on trajectory to trigger evasive maneuvers
-        object_avoid_buff = 3;
+        %CHANGE
+        tolerance_obj_dist = 10; % tolerance to determine how close object needs to be on trajectory to trigger evasive maneuvers
+        object_avoid_buff = 1;
 
         num_points = 10; % number of points to create between two points in trajectory
         traj_idx = 2; % stores where we are in trajectory
@@ -447,7 +448,7 @@ function route = avoidObstacles(curr_route, Xobs, traj_idx_start, traj_idx_end, 
                     for k = 1:4 % check all 4 corners of object for impact with center line
                         distance_to_obj = sqrt((y_vector(ii) - Xobs{j}(k,2))^2 + (x_vector(ii) - Xobs{j}(k,1))^2);%add in a distance to next object being less than the 10 steps
                         obj_line = abs(abs(Xobs{j}(k,2)) - abs(slope*Xobs{j}(k,1) + intercept));
-                        if distance_to_obj < tolerance_obj_dist &&  obj_line <= tolerance
+                        if distance_to_obj < tolerance_obj_dist %&&  obj_line <= tolerance %%CHANGE
                             obj_dectected = true;
                             obj_location = Xobs{j};
                             continue
@@ -464,17 +465,19 @@ function route = avoidObstacles(curr_route, Xobs, traj_idx_start, traj_idx_end, 
                 % find closest points on left and right side of track respectively to detected object
                         obs_center = center_obs(obj_location);
 
-                [~, dist_right] = knnsearch(right_track_ao(:,traj_idx)', obs_center);
-                [~, dist_left] = knnsearch(left_track_ao(:,traj_idx)', obs_center);
+                [idx_right, dist_right] = knnsearch(right_track_ao', obs_center);
+                [idx_left, dist_left] = knnsearch(left_track_ao', obs_center);
 
                 % %%%%%%% Avoid object %%%%%%%
                 % assign whether object is located on left or right side, determined by which minimum distance is smallest
                 if dist_right < dist_left % if object is on right
-                    route(:,traj_idx:traj_idx+object_avoid_buff) = (left_track_ao(:,traj_idx:traj_idx+object_avoid_buff)+curr_route(:,traj_idx:traj_idx+object_avoid_buff)) ./ 2;
+                    range = max(idx_right,1):idx_right+object_avoid_buff;
+                    route(:,range) = (left_track_ao(:,range)+curr_route(:,range)) ./ 2;
 %                     disp(['Zagged RIGHT to avoid Object ' num2str(j)])
 
-                else % if object is on left
-                    route(:,traj_idx:traj_idx+object_avoid_buff) = (right_track_ao(:,traj_idx:traj_idx+object_avoid_buff)+curr_route(:,traj_idx:traj_idx+object_avoid_buff)) ./ 2;
+                else % if objec(t is on left
+                    range = max(idx_left,1):idx_left+object_avoid_buff;
+                    route(:,range) = (right_track_ao(:,range)+curr_route(:,range)) ./ 2;
 %                     disp(['Zigged LEFT to avoid Object ' num2str(j)])
                 end
 

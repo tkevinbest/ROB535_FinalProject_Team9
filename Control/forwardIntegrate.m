@@ -40,7 +40,9 @@ function [Y,U,t_total,t_update,Xobs] = forwardIntegrate()
     Y(1,:) = [287,5,-176,0,2,0];
 
     % generate obstacles along the track
-    Xobs = generateRandomObstacles(9 + randi(16),TestTrack);
+    %Xobs = generateRandomObstacles(9 + randi(16),TestTrack);
+    Xobs = generateRandomObstacles(9 + (36),TestTrack);
+
 
     iteration = 1; % a counter that counts how many times the control input 
                    % generation function is called.
