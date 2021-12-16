@@ -26,8 +26,6 @@ bboxData = load('boundingBoxes.mat');
 bboxTable = bboxData.bboxTable;
 blds = boxLabelDatastore(bboxTable(:, 'vehicle'));
 
-%%
-
 pretrained = load('fasterRCNNResNet50EndToEndVehicleExample.mat');
 lgraph = layerGraph(pretrained.detector.Network);
 
